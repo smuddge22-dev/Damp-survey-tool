@@ -189,8 +189,6 @@
       <label class="half">Property address<input type="text" id="fAddress" placeholder="e.g. 14 Elm Road, Portsmouth"></label>
       <label class="half">Client<input type="text" id="fClient"></label>
       <label class="half">Survey date<input type="date" id="fDate"></label>
-      <label class="half">Survey ref<input type="text" id="fRef"></label>
-      <label>Surveyor<input type="text" id="fSurveyor"></label>
     </div>
   </section>
 
@@ -250,8 +248,6 @@
   const fAddress = document.getElementById('fAddress');
   const fClient = document.getElementById('fClient');
   const fDate = document.getElementById('fDate');
-  const fRef = document.getElementById('fRef');
-  const fSurveyor = document.getElementById('fSurveyor');
   fDate.valueAsDate = new Date();
 
   function uid(){ return 'id-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8); }
@@ -274,11 +270,11 @@
   }
 
   function getHeaderData(){
-    return { address:fAddress.value, client:fClient.value, date:fDate.value, ref:fRef.value, surveyor:fSurveyor.value };
+    return { address:fAddress.value, client:fClient.value, date:fDate.value };
   }
   function setHeaderData(h){
     fAddress.value = h.address||''; fClient.value = h.client||'';
-    fDate.value = h.date||''; fRef.value = h.ref||''; fSurveyor.value = h.surveyor||'';
+    fDate.value = h.date||'';
   }
 
   // ---------- image compression ----------
@@ -493,6 +489,14 @@
           }).join('') +
         '</div>' +
         '<label>Other observation<input type="text" class="loc-observation-other" placeholder="Anything not listed above" value="'+escapeHtml(loc.observationOther)+'"></label>' +
+        '<div class="grid">' +
+          '<label class="half">Linear meterage (m)<input type="number" step="0.1" min="0" inputmode="decimal" class="loc-meterage" placeholder="e.g. 2.4" value="'+escapeHtml(loc.meterage)+'"></label>' +
+          '<label class="half">Flooring<select class="loc-flooring">' +
+            '<option'+(loc.flooring==='Not Recorded'?' selected':'')+'>Not Recorded</option>' +
+            '<option'+(loc.flooring==='Carpet'?' selected':'')+'>Carpet</option>' +
+            '<option'+(loc.flooring==='Hard flooring'?' selected':'')+'>Hard flooring</option>' +
+          '</select></label>' +
+        '</div>' +
         '<label>Recommendations<textarea class="loc-recommendations" rows="2">'+escapeHtml(loc.recommendations)+'</textarea></label>' +
       '</div>' +
       '<div class="photos-grid"></div>' +
@@ -516,6 +520,8 @@
       });
     });
     card.querySelector('.loc-observation-other').addEventListener('input', e=> loc.observationOther = e.target.value);
+    card.querySelector('.loc-meterage').addEventListener('input', e=> loc.meterage = e.target.value);
+    card.querySelector('.loc-flooring').addEventListener('change', e=> loc.flooring = e.target.value);
     card.querySelector('.loc-recommendations').addEventListener('input', e=> loc.recommendations = e.target.value);
 
     card.querySelector('.btn-remove-location').addEventListener('click', ()=>{
@@ -543,7 +549,7 @@
   }
 
   document.getElementById('btnAddLocation').addEventListener('click', ()=>{
-    const loc = { id:uid(), name:'', observations:[], observationOther:'', moisture:'Not Assessed', recommendations:'', photos:[] };
+    const loc = { id:uid(), name:'', observations:[], observationOther:'', moisture:'Not Assessed', meterage:'', flooring:'Not Recorded', recommendations:'', photos:[] };
     survey.locations.push(loc);
     const card = createLocationCard(loc);
     locationsContainer.appendChild(card);
@@ -613,13 +619,15 @@
       try{
         const data = JSON.parse(reader.result);
         setHeaderData(data.header||{});
-        survey.locations = (data.locations||[]).map(l=>Object.assign({photos:[], observations:[], observationOther:'', moisture:'Not Assessed'}, l));
+        survey.locations = (data.locations||[]).map(l=>Object.assign({photos:[], observations:[], observationOther:'', moisture:'Not Assessed', meterage:'', flooring:'Not Recorded'}, l));
         locationsContainer.innerHTML='';
         survey.locations.forEach(loc=>{
           loc.photos = loc.photos||[];
           loc.observations = loc.observations||[];
           loc.observationOther = loc.observationOther||'';
           loc.moisture = loc.moisture||'Not Assessed';
+          loc.meterage = loc.meterage||'';
+          loc.flooring = loc.flooring||'Not Recorded';
           locationsContainer.appendChild(createLocationCard(loc));
         });
         showToast('Survey loaded');
@@ -636,9 +644,8 @@
     const printArea = document.getElementById('printArea');
     let html = '<div class="print-header"><h1>City Damp Solutions</h1><h2>Site Survey Record</h2>' +
       '<table class="print-meta">' +
-      '<tr><td>Property</td><td>'+escapeHtml(h.address)+'</td><td>Date</td><td>'+escapeHtml(h.date)+'</td></tr>' +
-      '<tr><td>Client</td><td>'+escapeHtml(h.client)+'</td><td>Ref</td><td>'+escapeHtml(h.ref)+'</td></tr>' +
-      '<tr><td>Surveyor</td><td colspan="3">'+escapeHtml(h.surveyor)+'</td></tr>' +
+      '<tr><td>Property</td><td colspan="3">'+escapeHtml(h.address)+'</td></tr>' +
+      '<tr><td>Client</td><td>'+escapeHtml(h.client)+'</td><td>Date</td><td>'+escapeHtml(h.date)+'</td></tr>' +
       '</table></div>';
     let i=1;
     for (const loc of survey.locations){
@@ -649,6 +656,7 @@
       html += '<div class="print-location"><h3>'+i+'. '+escapeHtml(loc.name||'Untitled location')+
         '<span class="print-risk '+moistClass+'">'+escapeHtml(loc.moisture||'Not Assessed')+' moisture</span></h3>' +
         '<p><strong>Observations:</strong> '+escapeHtml(obsText)+'</p>' +
+        '<p><strong>Flooring:</strong> '+escapeHtml(loc.flooring||'Not Recorded')+(loc.meterage?' &nbsp;\u2014&nbsp; <strong>Linear meterage:</strong> '+escapeHtml(String(loc.meterage))+'m':'')+'</p>' +
         '<p><strong>Recommendations:</strong> '+escapeHtml(loc.recommendations)+'</p>' +
         '<div class="print-photos">';
       for (const photo of loc.photos){
