@@ -104,6 +104,7 @@
   }
   .photo-item-actions button:last-child{border-right:none; color:var(--danger);}
   .btn-annotate{color:var(--teal-dark); font-weight:600;}
+  .btn-share-photo{color:var(--navy); font-weight:600;}
   .btn-add-photo{
     display:inline-block; background:#fff; border:1.5px dashed var(--teal);
     color:var(--teal-dark); font-weight:600; border-radius:8px; padding:9px 14px;
@@ -139,6 +140,7 @@
     width:100%; min-height:45vh; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
     font-size:11.5px; line-height:1.4; padding:10px; border-radius:8px; border:none; color:#1B2A33;
   }
+  #photoModalImg{max-width:100%; max-height:70vh; border-radius:8px; display:block; box-shadow:0 4px 20px rgba(0,0,0,.4);}
   .toast{
     position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
     background:var(--navy); color:#fff; padding:10px 18px; border-radius:20px; font-size:13.5px;
@@ -227,6 +229,20 @@
     <p>Your device didn't let this save directly to Files. Tap <strong>Copy</strong> below, then open Notes (or a new email/message), paste, and save it there — or press and hold the text and choose Copy yourself.</p>
     <p class="save-filename" id="saveModalFilename"></p>
     <textarea id="saveModalText" readonly></textarea>
+  </div>
+</div>
+
+<div id="photoModal" class="modal hidden">
+  <div class="modal-toolbar">
+    <span class="save-title">Save / share photo</span>
+    <div class="spacer"></div>
+    <button type="button" id="btnPhotoModalClose">Close</button>
+  </div>
+  <div class="canvas-wrap">
+    <img id="photoModalImg" alt="Survey photo">
+  </div>
+  <div class="save-body" style="flex:none;">
+    <p>Press and hold the photo above, then choose <strong>Save Image</strong> (goes to your Photos app) or <strong>Share</strong> to send it via WhatsApp, Mail, AirDrop and so on.</p>
   </div>
 </div>
 
@@ -446,6 +462,7 @@
       '<textarea class="photo-caption" placeholder="Note" rows="2">'+escapeHtml(photo.caption)+'</textarea>' +
       '<div class="photo-item-actions">' +
         '<button type="button" class="btn-annotate">Annotate</button>' +
+        '<button type="button" class="btn-share-photo">Share</button>' +
         '<button type="button" class="btn-remove-photo">Remove</button>' +
       '</div>';
     item.querySelector('.photo-label').addEventListener('input', e=> photo.label = e.target.value);
@@ -460,6 +477,7 @@
         thumb.src = await compositePhoto(photo, 500);
       });
     });
+    item.querySelector('.btn-share-photo').addEventListener('click', ()=> sharePhoto(photo, loc));
     photosGrid.appendChild(item);
     return item;
   }
@@ -584,6 +602,39 @@
     catch(err){ try{ copied = document.execCommand('copy'); }catch(e2){ copied=false; } }
     showToast(copied ? 'Copied \u2014 paste into Notes to save' : 'Select the text above and copy manually');
   });
+
+  // ---------- share / save an individual photo ----------
+  const photoModal = document.getElementById('photoModal');
+  function showImageFallback(dataUrl){
+    document.getElementById('photoModalImg').src = dataUrl;
+    photoModal.classList.remove('hidden');
+  }
+  document.getElementById('btnPhotoModalClose').addEventListener('click', ()=> photoModal.classList.add('hidden'));
+
+  async function sharePhoto(photo, loc){
+    showToast('Preparing photo\u2026');
+    let dataUrl;
+    try{
+      dataUrl = await compositePhoto(photo, photo.width);
+    }catch(err){
+      showToast('Could not prepare that photo \u2014 try again');
+      return;
+    }
+    const namePart = ((photo.label||loc.name||'photo').replace(/[^a-z0-9]+/gi,'-').toLowerCase().replace(/(^-|-$)/g,'')) || 'photo';
+    const filename = namePart+'.jpg';
+    if (navigator.share){
+      try{
+        const res = await fetch(dataUrl);
+        const blob = await res.blob();
+        const file = new File([blob], filename, {type:'image/jpeg'});
+        await navigator.share({files:[file], title:filename});
+        return;
+      }catch(err){
+        if (err && err.name === 'AbortError') return; // user closed the share sheet
+      }
+    }
+    showImageFallback(dataUrl);
+  }
 
   async function exportSurvey(){
     const header = getHeaderData();
