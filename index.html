@@ -62,7 +62,7 @@
   .grid label{grid-column:span 2;}
   .grid label.half{grid-column:span 1;}
   label{display:block; font-size:12px; color:var(--muted); font-weight:600; margin-bottom:10px;}
-  input[type=text], input[type=date], textarea, select{
+  input[type=text], input[type=date], input[type=number], textarea, select{
     width:100%; margin-top:4px; font:inherit; font-size:15px; color:var(--text);
     border:1px solid var(--border); border-radius:8px; padding:9px 10px; background:#fff;
   }
@@ -93,7 +93,7 @@
     display:flex; flex-direction:column;
   }
   .photo-thumb{width:100%; height:110px; object-fit:cover; display:block; background:#dde5e7;}
-  .photo-item .photo-label, .photo-item .photo-caption{
+  .photo-item .photo-label, .photo-item .photo-meterage, .photo-item .photo-caption{
     border:none; border-top:1px solid var(--border); border-radius:0; font-size:13px; padding:6px 8px;
   }
   .photo-item .photo-caption{min-height:36px;}
@@ -202,7 +202,7 @@
 <div id="annotateModal" class="modal hidden">
   <div class="modal-toolbar">
     <button type="button" class="tool active" data-tool="pen">Pen</button>
-    <button type="button" class="tool" data-tool="circle">Circle</button>
+    <button type="button" class="tool" data-tool="box">Box</button>
     <button type="button" class="tool" data-tool="arrow">Arrow</button>
     <button type="button" class="color active" data-color="#E5352B" style="background:#E5352B"></button>
     <button type="button" class="color" data-color="#FDD835" style="background:#FDD835"></button>
@@ -258,7 +258,12 @@
   const OBSERVATION_OPTIONS = [
     'Damp spots','Tide marks','Peeling paint / plaster damage','Mould growth',
     'External water leak','Internal water leak','Re-pointing','Raised ground levels',
-    'Inadequate air bricks','Woodworm','Faulty guttering / downpipes','Cavity wall insulation'
+    'Inadequate air bricks','Woodworm','Faulty guttering / downpipes','Cavity wall insulation',
+    'Wall tie failure','Condensation'
+  ];
+  const LOCATION_OPTIONS = [
+    'Front of property','Rear of property','Living room','Dining room','Hallway','Kitchen',
+    'Downstairs bathroom','Upstairs bathroom','Front bedroom','Middle bedroom','Rear bedroom','Other'
   ];
 
   const fAddress = document.getElementById('fAddress');
@@ -328,8 +333,9 @@
         ctx.beginPath();
         s.points.forEach((p,i)=>{ const x=p.x*scale,y=p.y*scale; if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
         ctx.stroke();
-      } else if (s.type==='circle'){
-        ctx.beginPath(); ctx.arc(s.cx*scale, s.cy*scale, s.r*scale, 0, Math.PI*2); ctx.stroke();
+      } else if (s.type==='box'){
+        const x1=s.x1*scale,y1=s.y1*scale,x2=s.x2*scale,y2=s.y2*scale;
+        ctx.strokeRect(Math.min(x1,x2), Math.min(y1,y2), Math.abs(x2-x1), Math.abs(y2-y1));
       } else if (s.type==='arrow'){
         const x1=s.x1*scale,y1=s.y1*scale,x2=s.x2*scale,y2=s.y2*scale;
         ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
@@ -413,7 +419,7 @@
     drawing=true;
     const p = toImgCoords(e);
     if (currentTool==='pen') liveShape = {type:'pen', color:currentColor, points:[p]};
-    else if (currentTool==='circle') liveShape = {type:'circle', color:currentColor, cx:p.x, cy:p.y, r:0, _start:p};
+    else if (currentTool==='box') liveShape = {type:'box', color:currentColor, x1:p.x, y1:p.y, x2:p.x, y2:p.y};
     else if (currentTool==='arrow') liveShape = {type:'arrow', color:currentColor, x1:p.x, y1:p.y, x2:p.x, y2:p.y};
     canvas.setPointerCapture(e.pointerId);
   });
@@ -421,14 +427,14 @@
     if(!drawing || !liveShape) return;
     const p = toImgCoords(e);
     if (currentTool==='pen') liveShape.points.push(p);
-    else if (currentTool==='circle'){ const dx=p.x-liveShape._start.x, dy=p.y-liveShape._start.y; liveShape.r=Math.sqrt(dx*dx+dy*dy); }
+    else if (currentTool==='box'){ liveShape.x2=p.x; liveShape.y2=p.y; }
     else if (currentTool==='arrow'){ liveShape.x2=p.x; liveShape.y2=p.y; }
     redraw();
   });
   function finishStroke(){
     if(!drawing) return;
     drawing=false;
-    if (liveShape){ delete liveShape._start; currentPhoto.shapes.push(liveShape); liveShape=null; }
+    if (liveShape){ currentPhoto.shapes.push(liveShape); liveShape=null; }
     redraw();
   }
   canvas.addEventListener('pointerup', finishStroke);
@@ -459,6 +465,7 @@
     item.innerHTML =
       '<img class="photo-thumb" src="'+photo.imgDataUrl+'">' +
       '<input type="text" class="photo-label" placeholder="Wall / area tag" value="'+escapeHtml(photo.label)+'">' +
+      '<input type="number" step="0.1" min="0" inputmode="decimal" class="photo-meterage" placeholder="Linear meterage (m)" value="'+escapeHtml(photo.meterage)+'">' +
       '<textarea class="photo-caption" placeholder="Note" rows="2">'+escapeHtml(photo.caption)+'</textarea>' +
       '<div class="photo-item-actions">' +
         '<button type="button" class="btn-annotate">Annotate</button>' +
@@ -466,6 +473,7 @@
         '<button type="button" class="btn-remove-photo">Remove</button>' +
       '</div>';
     item.querySelector('.photo-label').addEventListener('input', e=> photo.label = e.target.value);
+    item.querySelector('.photo-meterage').addEventListener('input', e=> photo.meterage = e.target.value);
     item.querySelector('.photo-caption').addEventListener('input', e=> photo.caption = e.target.value);
     item.querySelector('.btn-remove-photo').addEventListener('click', ()=>{
       loc.photos = loc.photos.filter(p=>p.id!==photo.id);
@@ -487,7 +495,12 @@
     const card = document.createElement('div'); card.className='location-card';
     card.innerHTML =
       '<div class="location-head">' +
-        '<input type="text" class="loc-name" placeholder="Location / area (e.g. Kitchen \u2013 external wall)" value="'+escapeHtml(loc.name)+'">' +
+        '<select class="loc-name">' +
+          '<option value=""'+(!loc.name?' selected':'')+' disabled>Select location\u2026</option>' +
+          LOCATION_OPTIONS.map(function(opt){
+            return '<option'+(loc.name===opt?' selected':'')+'>'+escapeHtml(opt)+'</option>';
+          }).join('') +
+        '</select>' +
         '<div class="loc-moisture-wrap">' +
           '<span class="loc-moisture-label">Moisture reading</span>' +
           '<select class="loc-moisture">' +
@@ -500,6 +513,7 @@
         '<button type="button" class="btn-remove-location">\u2715</button>' +
       '</div>' +
       '<div class="location-fields">' +
+        '<label>Detail (optional)<input type="text" class="loc-detail" placeholder="e.g. external wall, NE corner" value="'+escapeHtml(loc.detail)+'"></label>' +
         '<label>Observations</label>' +
         '<div class="obs-grid">' +
           OBSERVATION_OPTIONS.map(function(opt){
@@ -514,14 +528,21 @@
             '<option'+(loc.flooring==='Carpet'?' selected':'')+'>Carpet</option>' +
             '<option'+(loc.flooring==='Hard flooring'?' selected':'')+'>Hard flooring</option>' +
           '</select></label>' +
+          '<label class="half">DPC visible<select class="loc-dpc">' +
+            '<option'+(loc.dpcVisible==='Not Recorded'?' selected':'')+'>Not Recorded</option>' +
+            '<option'+(loc.dpcVisible==='Yes'?' selected':'')+'>Yes</option>' +
+            '<option'+(loc.dpcVisible==='No'?' selected':'')+'>No</option>' +
+          '</select></label>' +
         '</div>' +
         '<label>Recommendations<textarea class="loc-recommendations" rows="2">'+escapeHtml(loc.recommendations)+'</textarea></label>' +
       '</div>' +
       '<div class="photos-grid"></div>' +
-      '<label class="btn-add-photo">+ Add photo<input type="file" accept="image/*" capture="environment" class="photo-input" hidden></label>';
+      '<label class="btn-add-photo">+ Add photo<input type="file" accept="image/*" class="photo-input" hidden></label>';
 
     const nameInput = card.querySelector('.loc-name');
-    nameInput.addEventListener('input', ()=> loc.name = nameInput.value);
+    nameInput.addEventListener('change', ()=> loc.name = nameInput.value);
+
+    card.querySelector('.loc-detail').addEventListener('input', e=> loc.detail = e.target.value);
 
     const moistureSelect = card.querySelector('.loc-moisture');
     const applyMoistureColor = ()=> moistureSelect.style.borderColor = moistureColor(moistureSelect.value);
@@ -540,6 +561,7 @@
     card.querySelector('.loc-observation-other').addEventListener('input', e=> loc.observationOther = e.target.value);
     card.querySelector('.loc-meterage').addEventListener('input', e=> loc.meterage = e.target.value);
     card.querySelector('.loc-flooring').addEventListener('change', e=> loc.flooring = e.target.value);
+    card.querySelector('.loc-dpc').addEventListener('change', e=> loc.dpcVisible = e.target.value);
     card.querySelector('.loc-recommendations').addEventListener('input', e=> loc.recommendations = e.target.value);
 
     card.querySelector('.btn-remove-location').addEventListener('click', ()=>{
@@ -558,7 +580,7 @@
       if(!file) return;
       showToast('Adding photo\u2026');
       const {dataUrl,width,height} = await compressImage(file);
-      const photo = { id:uid(), imgDataUrl:dataUrl, width, height, label:loc.name||'', caption:'', shapes:[] };
+      const photo = { id:uid(), imgDataUrl:dataUrl, width, height, label:loc.name||'', caption:'', meterage:'', shapes:[] };
       loc.photos.push(photo);
       createPhotoItem(photo, loc, photosGrid);
     });
@@ -567,7 +589,7 @@
   }
 
   document.getElementById('btnAddLocation').addEventListener('click', ()=>{
-    const loc = { id:uid(), name:'', observations:[], observationOther:'', moisture:'Not Assessed', meterage:'', flooring:'Not Recorded', recommendations:'', photos:[] };
+    const loc = { id:uid(), name:'', detail:'', observations:[], observationOther:'', moisture:'Not Assessed', meterage:'', flooring:'Not Recorded', dpcVisible:'Not Recorded', recommendations:'', photos:[] };
     survey.locations.push(loc);
     const card = createLocationCard(loc);
     locationsContainer.appendChild(card);
@@ -670,15 +692,17 @@
       try{
         const data = JSON.parse(reader.result);
         setHeaderData(data.header||{});
-        survey.locations = (data.locations||[]).map(l=>Object.assign({photos:[], observations:[], observationOther:'', moisture:'Not Assessed', meterage:'', flooring:'Not Recorded'}, l));
+        survey.locations = (data.locations||[]).map(l=>Object.assign({photos:[], detail:'', observations:[], observationOther:'', moisture:'Not Assessed', meterage:'', flooring:'Not Recorded', dpcVisible:'Not Recorded'}, l));
         locationsContainer.innerHTML='';
         survey.locations.forEach(loc=>{
           loc.photos = loc.photos||[];
+          loc.detail = loc.detail||'';
           loc.observations = loc.observations||[];
           loc.observationOther = loc.observationOther||'';
           loc.moisture = loc.moisture||'Not Assessed';
           loc.meterage = loc.meterage||'';
           loc.flooring = loc.flooring||'Not Recorded';
+          loc.dpcVisible = loc.dpcVisible||'Not Recorded';
           locationsContainer.appendChild(createLocationCard(loc));
         });
         showToast('Survey loaded');
@@ -704,15 +728,16 @@
       const obsParts = (loc.observations||[]).slice();
       if (loc.observationOther) obsParts.push(loc.observationOther);
       const obsText = obsParts.length ? obsParts.join(', ') : '\u2014';
-      html += '<div class="print-location"><h3>'+i+'. '+escapeHtml(loc.name||'Untitled location')+
+      const heading = (loc.name||'Untitled location') + (loc.detail?' \u2014 '+loc.detail:'');
+      html += '<div class="print-location"><h3>'+i+'. '+escapeHtml(heading)+
         '<span class="print-risk '+moistClass+'">'+escapeHtml(loc.moisture||'Not Assessed')+' moisture</span></h3>' +
         '<p><strong>Observations:</strong> '+escapeHtml(obsText)+'</p>' +
-        '<p><strong>Flooring:</strong> '+escapeHtml(loc.flooring||'Not Recorded')+(loc.meterage?' &nbsp;\u2014&nbsp; <strong>Linear meterage:</strong> '+escapeHtml(String(loc.meterage))+'m':'')+'</p>' +
+        '<p><strong>Flooring:</strong> '+escapeHtml(loc.flooring||'Not Recorded')+(loc.meterage?' &nbsp;\u2014&nbsp; <strong>Linear meterage:</strong> '+escapeHtml(String(loc.meterage))+'m':'')+' &nbsp;\u2014&nbsp; <strong>DPC visible:</strong> '+escapeHtml(loc.dpcVisible||'Not Recorded')+'</p>' +
         '<p><strong>Recommendations:</strong> '+escapeHtml(loc.recommendations)+'</p>' +
         '<div class="print-photos">';
       for (const photo of loc.photos){
         const dataUrl = await compositePhoto(photo, 900);
-        html += '<figure><img src="'+dataUrl+'"><figcaption>'+escapeHtml(photo.label)+(photo.caption?' \u2014 '+escapeHtml(photo.caption):'')+'</figcaption></figure>';
+        html += '<figure><img src="'+dataUrl+'"><figcaption>'+escapeHtml(photo.label)+(photo.meterage?' \u2022 '+escapeHtml(String(photo.meterage))+'m':'')+(photo.caption?' \u2014 '+escapeHtml(photo.caption):'')+'</figcaption></figure>';
       }
       html += '</div></div>';
       i++;
